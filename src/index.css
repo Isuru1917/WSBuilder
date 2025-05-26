@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Additional global styles */
+td, th {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+@layer components {
+  .table-cell {
+    @apply whitespace-pre-wrap break-words py-2 px-4;
+  }
+  .pdf-cell {
+    @apply whitespace-pre-wrap break-words max-w-[150px] p-4;
+  }
+}
