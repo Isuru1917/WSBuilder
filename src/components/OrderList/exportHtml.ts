@@ -387,24 +387,14 @@ export const exportOrderDataAsHTML = (
   // Print remaining rows (if any) without repeating table headers after page breaks
   let remainingRows = visibleDataRows.slice(rowsPerPage);
   if (remainingRows.length > 0) {
-    // Continue using the same table structure for the first page, but do NOT repeat thead
-    // Insert a page break row, then just add <tr> for each row
-    printWindow.document.write(`
-      <tr class="page-break">
-        <td colspan="${visibleHeaders.length}" style="border:none; page-break-before:always;"></td>
-      </tr>
-    `);
+    // For each page after the first, start a new table (no thead), and insert a page break before it
     for (let pageIndex = 0; pageIndex < Math.ceil(remainingRows.length / rowsPerPage); pageIndex++) {
+      printWindow.document.write(`
+        <div style="page-break-before: always;"></div>
+        <table>
+          <tbody>
+      `);
       const pageRows = remainingRows.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
-      // Insert a page break for pages after the first continuation
-      if (pageIndex > 0) {
-        printWindow.document.write(`
-          <tr class="page-break">
-            <td colspan="${visibleHeaders.length}" style="border:none; page-break-before:always;"></td>
-          </tr>
-        `);
-      }
-      // Add rows for this page (no thead)
       for (let rowIdx = 0; rowIdx < pageRows.length; rowIdx++) {
         const row = pageRows[rowIdx];
         const actualRowIdx = rowsPerPage + (pageIndex * rowsPerPage) + rowIdx;
@@ -434,8 +424,11 @@ export const exportOrderDataAsHTML = (
           printWindow.document.write('</tr>');
         }
       }
+      printWindow.document.write(`
+          </tbody>
+        </table>
+      `);
     }
-    // The rows are added to the same tbody, no repeated thead
   }
   // Close the table properly
   printWindow.document.write(`
