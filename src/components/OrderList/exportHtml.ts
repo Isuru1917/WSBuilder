@@ -106,12 +106,18 @@ export const exportOrderDataAsHTML = (
           border-radius: 4px;
           background: none;
           font-weight: normal;
-        }table {
+        }        table {
           width: 100%;
-          border-collapse: collapse;
+          border-collapse: separate;
+          border-spacing: 0;
           margin-top: 10px;
           table-layout: fixed;
           font-size: 10px;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+          background: white;
+          border: 1px solid #e2e8f0;
         }
         /* Column width styles for main data table */
         table:not(.webbing-table) th:first-child,
@@ -130,36 +136,85 @@ export const exportOrderDataAsHTML = (
         table.webbing-table th:last-child,
         table.webbing-table td:last-child {
           width: 70%; /* Material column */
-        }        th, td {
-          border: 0.5px solid #333;
-          padding: 4px;
+        }        table.webbing-table {
+          max-width: 100%;
+          margin: 0 auto;
+          table-layout: fixed; /* Ensures fixed column widths */
+        }
+        th, td {
+          padding: 8px 10px;
           text-align: left;
           vertical-align: top;
-          overflow: hidden;
-          word-break: break-word;
+          overflow: visible;
           white-space: pre-wrap !important;
+          word-break: break-word !important;
           word-wrap: break-word;
           overflow-wrap: break-word;
           hyphens: auto;
-          line-height: 1.2 !important;
+          line-height: 1.25 !important;
           margin: 0 !important;
           font-size: 10px;
-        }        th {
-          background-color: #f3f3f3;
-          font-weight: normal;
+          border: none;
+          border-bottom: 1px solid #e5e7eb;
+          border-right: 1px solid #e5e7eb;
+          max-width: 100%;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* Remove space after paragraphs in all table cells */
+        td p, th p {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        td:last-child {
+          border-right: none;
+        }
+        th {
+          background-color: #f8fafc;
+          font-weight: 600;
           font-size: 10px;
+          color: #374151;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          border-bottom: 2px solid #e2e8f0;
+        }
+        /* Alternating row backgrounds */
+        tbody tr:nth-child(even) {
+          background-color: #f9fafb;
         }/* Highlighted cell styles for PDF export */
         .highlighted {
-          background-color: #e5e7eb !important;
-          background: #e5e7eb !important;
+          background-color: rgba(156, 163, 175, 0.3) !important;
+          background: rgba(156, 163, 175, 0.3) !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
           color-adjust: exact !important;
         }        .empty-row td {
           height: 20px;
-          border: 0.5px solid #333;
+          border-bottom: 1px solid #e5e7eb;
+        }        /* Special styling for webbing cells - Excel-like behavior */
+        table.webbing-table td {
+          padding: 4px 8px;
+          line-height: 0.75 !important;
+          font-family: Arial, sans-serif;
+          font-size: 10px;
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
+          overflow: visible;
         }
-        @media print {
+        
+        /* Remove any extra spacing from nested elements */
+        table.webbing-table td p,
+        table.webbing-table td span,
+        table.webbing-table td div {
+          margin: 0 !important;
+          padding: 0 !important;
+          line-height: inherit;
+          display: inline;
+        }
+        
+        /* Hide any manual line breaks and let natural wrapping occur */
+        table.webbing-table td br {
+          display: none;
+        }@media print {
           body { 
             margin: 0;
             padding: 0.5cm;
@@ -173,10 +228,28 @@ export const exportOrderDataAsHTML = (
           button {
             display: none;
           }
+          /* Preserve table styling in print */
+          table {
+            box-shadow: none !important;
+            border: 1px solid #e2e8f0 !important;
+          }
+          th {
+            background-color: #f8fafc !important;
+            color: #374151 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          tbody tr:nth-child(even) {
+            background-color: #f9fafb !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
           /* Ensure highlighted cells maintain background in print */
           .highlighted {
-            background-color: #e5e7eb !important;
-            background: #e5e7eb !important;
+            background-color: rgba(156, 163, 175, 0.3) !important;
+            background: rgba(156, 163, 175, 0.3) !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
             color-adjust: exact !important;
@@ -246,26 +319,23 @@ export const exportOrderDataAsHTML = (
 
   // Calculate how many rows fit on the first page (e.g., 30)
   const rowsPerPage = 30;  // Print only the first page's rows with header
-  for (let rowIdx = 0; rowIdx < visibleDataRows.length; rowIdx++) {
-    // If this is the first page, print as usual
-    if (rowIdx < rowsPerPage) {
-      printWindow.document.write(`<tr>`);
-      const row = visibleDataRows[rowIdx];
-      let visibleColIndex = 0;
-      for (let i = 0; i < row.length; i++) {
-        if (hidePanelColumns && i > 0 && i % 2 === 0) continue;
-          // Determine cell type and check if highlighted
-        const datasetIdx = Math.floor(i / 2);
-        const cellType = i % 2 === 0 ? 'panel' : 'material';
-        const cellKey = `${cellType}-${datasetIdx}-${rowIdx}`;
-        const isHighlighted = highlightedCells && highlightedCells.has(cellKey);
-        const cellClass = isHighlighted ? ' class="highlighted"' : '';
-        
-        printWindow.document.write(`<td${cellClass}>${row[i] || ''}</td>`);
-        visibleColIndex++;
-      }
-      printWindow.document.write(`</tr>`);
+  // Print only the first page's rows with header
+  for (let rowIdx = 0; rowIdx < visibleDataRows.length && rowIdx < rowsPerPage; rowIdx++) {
+    printWindow.document.write(`<tr>`);
+    const row = visibleDataRows[rowIdx];
+    let visibleColIndex = 0;
+    for (let i = 0; i < row.length; i++) {
+      if (hidePanelColumns && i > 0 && i % 2 === 0) continue;
+      // Determine cell type and check if highlighted
+      const datasetIdx = Math.floor(i / 2);
+      const cellType = i % 2 === 0 ? 'panel' : 'material';
+      const cellKey = `${cellType}-${datasetIdx}-${rowIdx}`;
+      const isHighlighted = highlightedCells && highlightedCells.has(cellKey);
+      const cellClass = isHighlighted ? ' class="highlighted"' : '';
+      printWindow.document.write(`<td${cellClass}>${row[i] || ''}</td>`);
+      visibleColIndex++;
     }
+    printWindow.document.write(`</tr>`);
   }
   // Add empty rows to fill the first page if needed - but only if we need to add page breaks
   if (dataRows.length > rowsPerPage) {
@@ -282,9 +352,8 @@ export const exportOrderDataAsHTML = (
       </table>
   `);  // Add webbing data table if available - simplified version with only 2 columns
   if (webbingDataRows && webbingDataRows.length > 0) {
-    printWindow.document.write(`
-      <div style="margin-top: 30px; margin-bottom: 10px;">
-        <h2 style="font-size: 16px; margin-bottom: 10px;">Webbing Details</h2>
+    printWindow.document.write(`      <div class="webbing-section" style="margin-top: 30px; margin-bottom: 10px;">
+        <h2 class="section-title" style="font-size: 14px; margin-bottom: 8px; font-weight: 700; color: #1e293b; text-align: center; position: relative; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">Webbing Details</h2>
       </div>
       <table class="webbing-table">
         <thead>
@@ -299,13 +368,14 @@ export const exportOrderDataAsHTML = (
           </tr>
         </thead>
         <tbody>
-    `);
-
-    // Add webbing data rows - each row has only 2 cells
+    `);    // Add webbing data rows - each row has only 2 cells with clean Excel-like text
     for (const row of webbingDataRows) {
       printWindow.document.write(`<tr>`);
-      printWindow.document.write(`<td>${row[0] || ''}</td>`);
-      printWindow.document.write(`<td>${row[1] || ''}</td>`);
+      // Output both columns as-is, preserving line breaks and spaces (no normalization)
+      const panelText = row[0] || '';
+      const webbingText = row[1] || '';
+      printWindow.document.write(`<td>${panelText}</td>`);
+      printWindow.document.write(`<td>${webbingText}</td>`);
       printWindow.document.write(`</tr>`);
     }
 
@@ -317,17 +387,15 @@ export const exportOrderDataAsHTML = (
   // Print remaining rows (if any) without repeating table headers after page breaks
   let remainingRows = visibleDataRows.slice(rowsPerPage);
   if (remainingRows.length > 0) {
-    // Continue using the same table structure for the first page
+    // Continue using the same table structure for the first page, but do NOT repeat thead
+    // Insert a page break row, then just add <tr> for each row
     printWindow.document.write(`
       <tr class="page-break">
         <td colspan="${visibleHeaders.length}" style="border:none; page-break-before:always;"></td>
       </tr>
     `);
-    
-    // Add rows from next pages without headers
     for (let pageIndex = 0; pageIndex < Math.ceil(remainingRows.length / rowsPerPage); pageIndex++) {
       const pageRows = remainingRows.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
-      
       // Insert a page break for pages after the first continuation
       if (pageIndex > 0) {
         printWindow.document.write(`
@@ -336,28 +404,26 @@ export const exportOrderDataAsHTML = (
           </tr>
         `);
       }
-        // Add rows for this page
-      for (let rowIdx = 0; rowIdx < pageRows.length; rowIdx++) {        const row = pageRows[rowIdx];
-        // Calculate the actual row index in the original data
+      // Add rows for this page (no thead)
+      for (let rowIdx = 0; rowIdx < pageRows.length; rowIdx++) {
+        const row = pageRows[rowIdx];
         const actualRowIdx = rowsPerPage + (pageIndex * rowsPerPage) + rowIdx;
         printWindow.document.write('<tr>');
         let visibleColIndex = 0;
         for (let i = 0; i < row.length; i++) {
           if (hidePanelColumns && i > 0 && i % 2 === 0) continue;
-          
           // Determine cell type and check if highlighted
           const datasetIdx = Math.floor(i / 2);
           const cellType = i % 2 === 0 ? 'panel' : 'material';
           const cellKey = `${cellType}-${datasetIdx}-${actualRowIdx}`;
           const isHighlighted = highlightedCells && highlightedCells.has(cellKey);
           const cellClass = isHighlighted ? ' class="highlighted"' : '';
-          
           printWindow.document.write(`<td${cellClass}>${row[i] || ''}</td>`);
           visibleColIndex++;
         }
         printWindow.document.write('</tr>');
       }
-        // Fill the rest of the page with empty rows if needed - but only if we have more pages to come
+      // Fill the rest of the page with empty rows if needed - but only if we have more pages to come
       if ((pageIndex < Math.ceil(remainingRows.length / rowsPerPage) - 1) && pageRows.length < rowsPerPage) {
         for (let i = pageRows.length; i < rowsPerPage; i++) {
           printWindow.document.write('<tr class="empty-row">');
@@ -369,9 +435,9 @@ export const exportOrderDataAsHTML = (
         }
       }
     }
-    // We don't need to close and reopen tables between pages anymore
-    // The rows are added to the same tbody
-  }  // Close the table properly
+    // The rows are added to the same tbody, no repeated thead
+  }
+  // Close the table properly
   printWindow.document.write(`
         </tbody>
       </table>
@@ -391,7 +457,6 @@ export const exportOrderDataAsHTML = (
             cell.style.colorAdjust = 'exact';
           });
         });
-        
         // Also apply on page load
         document.addEventListener('DOMContentLoaded', function() {
           const highlightedCells = document.querySelectorAll('.highlighted');

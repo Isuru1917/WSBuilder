@@ -5,9 +5,27 @@
     <link rel="icon" type="image/png" href="/aqua-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WS Builder</title>
+    <style>
+      /* Global scaling to 75% while maintaining layout integrity */
+      html {
+        transform: scale(0.75);
+        transform-origin: 0 0;
+        width: 133.33%;  /* 100/0.75 = 133.33 */
+        height: 133.33%;
+        overflow-x: hidden;
+      }
+      
+      /* Adjust body to compensate for scaling */
+      body {
+        min-height: 100vh;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script src="/scale-helper.js"></script>
   </body>
 </html>
