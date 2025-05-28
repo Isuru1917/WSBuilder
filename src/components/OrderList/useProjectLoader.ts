@@ -10,6 +10,7 @@ import { projectService } from '../../lib/supabase';
  * @param setHidePanelColumns Setter for hidePanelColumns toggle state
  * @param createMergedData Function to create merged data after loading project
  * @param setImages Setter for images array (optional)
+ * @param setHighlightedCells Setter for highlighted cells (optional)
  */
 export function useProjectLoader({ 
   setExcelDataSets, 
@@ -17,15 +18,17 @@ export function useProjectLoader({
   setShopOrderNote, 
   setHidePanelColumns,
   createMergedData,
-  setImages 
+  setImages,
+  setHighlightedCells
 }: { 
   setExcelDataSets: Dispatch<SetStateAction<any[]>>, 
   setOrderNo: Dispatch<SetStateAction<string>>, 
   setShopOrderNote: Dispatch<SetStateAction<string>>,
   setHidePanelColumns: Dispatch<SetStateAction<boolean>>,
   createMergedData?: (datasets: any[]) => void,
-  setImages?: Dispatch<SetStateAction<any[]>>
-}) {
+  setImages?: Dispatch<SetStateAction<any[]>>,
+  setHighlightedCells?: Dispatch<SetStateAction<Set<string>>>
+}){
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
@@ -37,11 +40,16 @@ export function useProjectLoader({
         setShopOrderNote(project.shop_order_note || '');
         const excelData = project.excel_data || [];
         setExcelDataSets(excelData);
-        
-        // Load images if setImages is provided
+          // Load images if setImages is provided
         if (setImages && project.images) {
           console.log('Loading', project.images.length, 'images for project');
           setImages(project.images);
+        }
+        
+        // Load highlighted cells if setHighlightedCells is provided
+        if (setHighlightedCells && project.highlighted_cells) {
+          console.log('Loading', project.highlighted_cells.length, 'highlighted cells for project');
+          setHighlightedCells(new Set(project.highlighted_cells));
         }
         
         // Call createMergedData if provided and there's excel data

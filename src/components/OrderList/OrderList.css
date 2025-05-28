@@ -30,6 +30,13 @@
   color: #1a202c;
 }
 
+/* Highlighted cell style */
+.highlighted-cell {
+  background-color: #ffe082 !important; /* Amber 200 */
+  transition: background 0.2s;
+  box-shadow: 0 0 0 2px #ffd54f;
+}
+
 /* Modern Button Styles */
 .modern-button {
   background: #4f46e5;

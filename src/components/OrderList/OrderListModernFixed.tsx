@@ -59,10 +59,13 @@ const OrderList = () => {
   const [orderNo, setOrderNo] = useState<string>('');
   const [shopOrderNote, setShopOrderNote] = useState<string>('');
   const [mergedData, setMergedData] = useState<any[][]>([]);
-  const [mergedWebbingData, setMergedWebbingData] = useState<any[][]>([]);
-  const [errorMessage, setErrorMessage] = useState<string>('');
-  const [hidePanelColumns, setHidePanelColumns] = useState(false);  const [successMessage, setSuccessMessage] = useState('');
+  const [mergedWebbingData, setMergedWebbingData] = useState<any[][]>([]);  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [hidePanelColumns, setHidePanelColumns] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Cell highlighting state
+  const [highlightedCells, setHighlightedCells] = useState<Set<string>>(new Set());
 
   // Effect: update projectId when orderNo changes
   useEffect(() => {
@@ -78,13 +81,13 @@ const OrderList = () => {
     setIsSaving(true);
     setErrorMessage('');
     setSuccessMessage('');
-    try {
-      const project = {
+    try {      const project = {
         name: '',
         order_no: orderNo,
         shop_order_note: shopOrderNote,
         excel_data: excelDataSets,
-        images // Save images array
+        images, // Save images array
+        highlighted_cells: Array.from(highlightedCells) // Convert Set to Array for storage
       };
       const saved = await projectService.saveProject(project);
       if (saved) {
@@ -515,10 +518,15 @@ const OrderList = () => {
                 }
               }
             }
-            
-            // Process data and remove only the "cutting" or "cutting-s" text
+              // Process data and remove only the "cutting" or "cutting-s" text
             const newRows = jsonData.map((row, rowIndex) => {
-              let panelNo = row['Note Text'] || row['Panel No'] || row['Cutting'] || row[Object.keys(row)[0]] || '';
+              // Priority logic: Panel No first, then Note Text as fallback if Panel No is empty
+              let panelNo = '';
+              if (row['Panel No'] && String(row['Panel No']).trim() !== '') {
+                panelNo = row['Panel No'];
+              } else {
+                panelNo = row['Note Text'] || row['Cutting'] || row[Object.keys(row)[0]] || '';
+              }
               let material = row['Description'] || row['Material'] || row[Object.keys(row)[1]] || '';
               
               // Convert to strings
@@ -725,7 +733,7 @@ const OrderList = () => {
     setMergedData(newMergedData);
   }, [setMergedData, setMergedWebbingData]);
   // Load project from URL if projectId is present
-  useProjectLoader({ setExcelDataSets, setOrderNo, setShopOrderNote, setHidePanelColumns, createMergedData, setImages });
+  useProjectLoader({ setExcelDataSets, setOrderNo, setShopOrderNote, setHidePanelColumns, createMergedData, setImages, setHighlightedCells });
     // Handle header cell edit
   const handleHeaderEdit = (datasetIdx: number, isPanel: boolean, value: string) => {
     const updatedDatasets = [...excelDataSets];
@@ -741,15 +749,15 @@ const OrderList = () => {
     }
   };
 
-  // HTML table export function that opens in a new tab
-  const handleExportPDF = () => {
+  // HTML table export function that opens in a new tab  const handleExportPDF = () => {
     exportOrderDataAsHTML(
       orderNo,
       shopOrderNote,
       mergedData,
       excelDataSets,
       hidePanelColumns,
-      mergedWebbingData // Add webbing data to export function
+      mergedWebbingData, // Add webbing data to export function
+      Array.from(highlightedCells) // Add highlighted cells to export
     );
   };
 
@@ -889,8 +897,7 @@ const OrderList = () => {
     }
     resetDragState();
   };
-  
-  const resetDragState = () => {
+    const resetDragState = () => {
     // Reset all cells
     Object.values(cellRefs.current).forEach(cell => {
       if (cell) {
@@ -907,6 +914,30 @@ const OrderList = () => {
     setDraggedPair(null);
     setDropTarget(null);
     document.body.style.cursor = 'default';
+  };
+
+  // Cell highlighting handlers
+  const handleCellClick = (datasetIdx: number, rowIdx: number, cellType: 'panel' | 'material') => {
+    const cellKey = `${cellType}-${datasetIdx}-${rowIdx}`;
+    const updatedHighlighted = new Set(highlightedCells);
+    
+    if (updatedHighlighted.has(cellKey)) {
+      updatedHighlighted.delete(cellKey);
+    } else {
+      updatedHighlighted.add(cellKey);
+    }
+    
+    setHighlightedCells(updatedHighlighted);
+  };
+
+  const clearHighlights = () => {
+    setHighlightedCells(new Set());
+  };
+
+  const getCellClassName = (datasetIdx: number, rowIdx: number, cellType: 'panel' | 'material', baseClassName: string) => {
+    const cellKey = `${cellType}-${datasetIdx}-${rowIdx}`;
+    const isHighlighted = highlightedCells.has(cellKey);
+    return `${baseClassName} ${isHighlighted ? 'highlighted-cell' : ''}`;
   };
   
   // Add animation effects
@@ -1010,9 +1041,7 @@ const OrderList = () => {
             >
               <Upload size={18} />
               <span>Upload Images</span>
-            </button>
-
-            <button
+            </button>            <button
               onClick={handleExportPDF}
               disabled={mergedData.length === 0}
               className="action-button pdf-button"
@@ -1020,6 +1049,16 @@ const OrderList = () => {
               <FileText size={18} />
               <span>Export PDF</span>
             </button>
+
+            {highlightedCells.size > 0 && (
+              <button
+                onClick={clearHighlights}
+                className="action-button clear-highlights-button"
+                title="Clear all highlighted cells"
+              >
+                <span>Clear Highlights ({highlightedCells.size})</span>
+              </button>
+            )}
           </div>
         </div>
         
@@ -1105,12 +1144,11 @@ const OrderList = () => {
                         {excelDataSets.map((dataset, datasetIdx) => (
                           <React.Fragment key={`${dataset.id}-${rowIdx}`}>
                             {dataset.rows[rowIdx] ? (
-                              <>
-                                <td 
+                              <>                                <td 
                                   ref={(el) => {
                                     if (el) cellRefs.current[`panel-${datasetIdx}-${rowIdx}`] = el;
                                   }}
-                                  className={`table-cell panel-cell ${hidePanelColumns && datasetIdx > 0 ? 'hidden' : ''}`}
+                                  className={getCellClassName(datasetIdx, rowIdx, 'panel', `table-cell panel-cell ${hidePanelColumns && datasetIdx > 0 ? 'hidden' : ''}`)}
                                   draggable={true}
                                   onDragStart={(e) => handleDragStart(e, datasetIdx, rowIdx)}
                                   onDragOver={(e) => {
@@ -1122,7 +1160,8 @@ const OrderList = () => {
                                     handleDragEnd();
                                   }}
                                   onDragEnd={handleDragEnd}
-                                  title="Drag to move Panel No and Material pair"
+                                  onClick={() => handleCellClick(datasetIdx, rowIdx, 'panel')}
+                                  title="Click to highlight, drag to move Panel No and Material pair"
                                 >
                                   {dataset.rows[rowIdx].panelNo}
                                 </td>
@@ -1130,7 +1169,7 @@ const OrderList = () => {
                                   ref={(el) => {
                                     if (el) cellRefs.current[`material-${datasetIdx}-${rowIdx}`] = el;
                                   }}
-                                  className="table-cell material-cell"
+                                  className={getCellClassName(datasetIdx, rowIdx, 'material', 'table-cell material-cell')}
                                   draggable={true}
                                   onDragStart={(e) => handleDragStart(e, datasetIdx, rowIdx)}
                                   onDragOver={(e) => {
@@ -1142,7 +1181,8 @@ const OrderList = () => {
                                     handleDragEnd();
                                   }}
                                   onDragEnd={handleDragEnd}
-                                  title="Drag to move Panel No and Material pair"
+                                  onClick={() => handleCellClick(datasetIdx, rowIdx, 'material')}
+                                  title="Click to highlight, drag to move Panel No and Material pair"
                                 >
                                   {dataset.rows[rowIdx].material}
                                 </td>

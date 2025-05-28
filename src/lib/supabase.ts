@@ -32,6 +32,7 @@ export type Project = {
   user_id?: string;
   excel_data?: ExcelDataset[]; // This contains the nested structure
   images?: ImageItem[]; // Image metadata for frontend use
+  highlighted_cells?: string[]; // Array of highlighted cell keys
 };
 
 // Excel data type as stored in the database
@@ -365,11 +366,13 @@ export const projectService = {
       // Step 2: Extract excel data and images, prepare project object
       const excelData = project.excel_data || [];
       const images = project.images || [];
+      const highlightedCells = project.highlighted_cells || [];
       const projectToSave = {
         name: project.name,
         order_no: project.order_no,
         shop_order_note: project.shop_order_note,
-        excel_data: excelData // This will be stored as JSON in the jsonb column
+        excel_data: excelData, // This will be stored as JSON in the jsonb column
+        highlighted_cells: highlightedCells // Store highlighted cells as JSON array
       };
 
       let savedProject;
@@ -524,7 +527,8 @@ export const projectService = {
 
         return {
           ...project,
-          images
+          images,
+          highlighted_cells: project.highlighted_cells || [] // Include highlighted cells
         };
       }
 

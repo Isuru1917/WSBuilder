@@ -79,13 +79,13 @@ const OrderList = () => {
         setIsSaving(false);
         return;
       }
-      
-      const project = {
+        const project = {
         name: '',
         order_no: orderNo,
         shop_order_note: shopOrderNote,
         excel_data: excelDataSets,
-        images // Save images array
+        images, // Save images array
+        highlighted_cells: Array.from(highlightedCells) // Convert Set to Array for storage
       };
       
       const saved = await projectService.saveProject(project);
@@ -520,10 +520,12 @@ const OrderList = () => {
                 }
               }
             }
-            
-            // Process data and remove only the "cutting" or "cutting-s" text
+              // Process data and remove only the "cutting" or "cutting-s" text
             const newRows = jsonData.map((row, rowIndex) => {
-              let panelNo = row['Note Text'] || row['Panel No'] || row['Cutting'] || row[Object.keys(row)[0]] || '';
+              // Primary: Use Panel No if it exists and has data, otherwise fallback to Note Text
+              let panelNo = (row['Panel No'] && String(row['Panel No']).trim()) || 
+                           (row['Note Text'] && String(row['Note Text']).trim()) || 
+                           row['Cutting'] || row[Object.keys(row)[0]] || '';
               let material = row['Description'] || row['Material'] || row[Object.keys(row)[1]] || '';
               
               // Convert to strings

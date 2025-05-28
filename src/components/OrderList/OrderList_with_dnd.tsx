@@ -58,14 +58,22 @@ const OrderList = () => {
   const [orderNo, setOrderNo] = useState<string>('');
   const [shopOrderNote, setShopOrderNote] = useState<string>('');
   const [mergedData, setMergedData] = useState<any[][]>([]);
-  const [mergedWebbingData, setMergedWebbingData] = useState<any[][]>([]);
-  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [mergedWebbingData, setMergedWebbingData] = useState<any[][]>([]);  const [errorMessage, setErrorMessage] = useState<string>('');
   const [hidePanelColumns, setHidePanelColumns] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-
+  // Cell highlighting state
+  const [highlightedCells, setHighlightedCells] = useState<Set<string>>(new Set());
   // Load project from URL if projectId is present
-  useProjectLoader({ setExcelDataSets, setOrderNo, setShopOrderNote, setHidePanelColumns });
+  useProjectLoader({ 
+    setExcelDataSets, 
+    setOrderNo, 
+    setShopOrderNote, 
+    setHidePanelColumns, 
+    createMergedData, 
+    setImages, 
+    setHighlightedCells 
+  });
 
   // Effect: update projectId when orderNo changes
   useEffect(() => {
@@ -76,12 +84,105 @@ const OrderList = () => {
   const tableRef = useRef<HTMLTableElement>(null);
   // New state for drag and drop functionality
   const [draggedPair, setDraggedPair] = useState<{datasetIndex: number, rowIndex: number} | null>(null);
-  const [dropTarget, setDropTarget] = useState<{datasetIndex: number, rowIndex: number} | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [dropTarget, setDropTarget] = useState<{datasetIndex: number, rowIndex: number} | null>(null);  const [isDragging, setIsDragging] = useState(false);
   // Refs for GSAP animations
   const ghostRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<{[key: string]: HTMLTableRowElement}>({});
   
+  // Function to create merged data from excel datasets
+  const createMergedData = (datasets: ExcelData[]) => {
+    // Find the maximum number of rows across all datasets
+    const maxRows = Math.max(...datasets.map(ds => ds.rows.length), 0);
+    
+    if (maxRows === 0) {
+      setMergedData([]);
+      setMergedWebbingData([]);
+      return;
+    }
+    
+    // Create header row with panel and material headings for each dataset
+    const headerRow: string[] = [];
+    datasets.forEach((dataset) => {
+      headerRow.push(dataset.panelHeading, dataset.materialHeading);
+    });
+    
+    // Create data rows, separating webbing items
+    let dataRows: any[][] = [];
+    
+    // First, extract rows with "webbing" in the material field for each dataset
+    const webbingMap = new Map<number, OrderRow[]>();
+    
+    // Identify and separate webbing rows from each dataset
+    datasets.forEach((dataset, datasetIdx) => {
+      const webbingItems: OrderRow[] = [];
+      
+      dataset.rows.forEach(row => {
+        if (row.material.toLowerCase().includes('webbing')) {
+          webbingItems.push(row);
+        }
+      });
+      
+      if (webbingItems.length > 0) {
+        webbingMap.set(datasetIdx, webbingItems);
+      }
+    });
+    
+    // Create updated datasets with webbing rows removed
+    const updatedDatasets = datasets.map((dataset) => {
+      return {
+        ...dataset,
+        rows: dataset.rows.filter(row => !row.material.toLowerCase().includes('webbing'))
+      };
+    });
+    
+    // Create regular data rows (excluding webbing items)
+    for (let i = 0; i < maxRows; i++) {
+      const row: any[] = [];
+      updatedDatasets.forEach(dataset => {
+        // If this dataset has this row, add its data, otherwise add empty cells
+        if (i < dataset.rows.length) {
+          row.push(dataset.rows[i].panelNo, dataset.rows[i].material);
+        } else {
+          row.push('', '');
+        }
+      });
+      // Only add non-empty rows
+      if (row.some(cell => String(cell).trim() !== '')) {
+        dataRows.push(row);
+      }
+    }
+    
+    // Create webbing data rows - only from the first Excel dataset that has webbing items
+    // Find the first dataset that contains webbing items
+    const firstDatasetWithWebbing = Array.from(webbingMap.keys()).sort()[0];
+    
+    if (firstDatasetWithWebbing !== undefined) {
+      const webbingItems = webbingMap.get(firstDatasetWithWebbing) || [];
+      
+      if (webbingItems.length > 0) {
+        // Get column headings from the dataset with webbing
+        const dataset = datasets[firstDatasetWithWebbing];
+        const webbingHeaderRow = [dataset.panelHeading, dataset.materialHeading];
+        
+        // Create webbing data rows from only the first dataset with webbing
+        const rows = webbingItems.map(item => [item.panelNo, item.material]);
+        
+        // Set the merged webbing data (only two columns)
+        setMergedWebbingData([webbingHeaderRow, ...rows]);
+      } else {
+        // No webbing data found
+        setMergedWebbingData([]);
+      }
+    } else {
+      // No dataset with webbing found
+      setMergedWebbingData([]);
+    }
+    
+    // Combine header and regular data rows
+    const newMergedData = [headerRow, ...dataRows];
+    setMergedData(newMergedData);
+  };
+
   // Load filter keywords from localStorage on component mount
   useEffect(() => {
     const loadKeywords = async () => {
@@ -124,13 +225,13 @@ const OrderList = () => {
     setIsSaving(true);
     setErrorMessage('');
     setSuccessMessage('');
-    try {
-      const project = {
+    try {      const project = {
         name: '',
         order_no: orderNo,
         shop_order_note: shopOrderNote,
         excel_data: excelDataSets,
-        images // Save images array
+        images, // Save images array
+        highlighted_cells: Array.from(highlightedCells) // Convert Set to Array for storage
       };
       const saved = await projectService.saveProject(project);
       if (saved) {
@@ -312,10 +413,15 @@ const OrderList = () => {
                 }
               }
             }
-            
-            // Process data and remove only the "cutting" or "cutting-s" text
+              // Process data and remove only the "cutting" or "cutting-s" text
             const newRows = jsonData.map((row, rowIndex) => {
-              let panelNo = row['Note Text'] || row['Panel No'] || row['Cutting'] || row[Object.keys(row)[0]] || '';
+              // Priority logic: Panel No first, then Note Text as fallback if Panel No is empty
+              let panelNo = '';
+              if (row['Panel No'] && String(row['Panel No']).trim() !== '') {
+                panelNo = row['Panel No'];
+              } else {
+                panelNo = row['Note Text'] || row['Cutting'] || row[Object.keys(row)[0]] || '';
+              }
               let material = row['Description'] || row['Material'] || row[Object.keys(row)[1]] || '';
               
               // Convert to strings
@@ -394,101 +500,7 @@ const OrderList = () => {
       
     } catch (error) {
       setErrorMessage('An unexpected error occurred during file processing. Please try again.');
-    }
-  };
-  
-  const createMergedData = (datasets: ExcelData[]) => {
-    // Find the maximum number of rows across all datasets
-    const maxRows = Math.max(...datasets.map(ds => ds.rows.length), 0);
-    
-    if (maxRows === 0) {
-      setMergedData([]);
-      setMergedWebbingData([]);
-      return;
-    }
-    
-    // Create header row with panel and material headings for each dataset
-    const headerRow: string[] = [];
-    datasets.forEach((dataset) => {
-      headerRow.push(dataset.panelHeading, dataset.materialHeading);
-    });
-    
-    // Create data rows, separating webbing items
-    let dataRows: any[][] = [];
-    
-    // First, extract rows with "webbing" in the material field for each dataset
-    const webbingMap = new Map<number, OrderRow[]>();
-    
-    // Identify and separate webbing rows from each dataset
-    datasets.forEach((dataset, datasetIdx) => {
-      const webbingItems: OrderRow[] = [];
-      
-      dataset.rows.forEach(row => {
-        if (row.material.toLowerCase().includes('webbing')) {
-          webbingItems.push(row);
-        }
-      });
-      
-      if (webbingItems.length > 0) {
-        webbingMap.set(datasetIdx, webbingItems);
-      }
-    });
-    
-    // Create updated datasets with webbing rows removed
-    const updatedDatasets = datasets.map((dataset) => {
-      return {
-        ...dataset,
-        rows: dataset.rows.filter(row => !row.material.toLowerCase().includes('webbing'))
-      };
-    });
-    
-    // Create regular data rows (excluding webbing items)
-    for (let i = 0; i < maxRows; i++) {
-      const row: any[] = [];
-      updatedDatasets.forEach(dataset => {
-        // If this dataset has this row, add its data, otherwise add empty cells
-        if (i < dataset.rows.length) {
-          row.push(dataset.rows[i].panelNo, dataset.rows[i].material);
-        } else {
-          row.push('', '');
-        }
-      });
-      // Only add non-empty rows
-      if (row.some(cell => String(cell).trim() !== '')) {
-        dataRows.push(row);
-      }
-    }
-    
-    // Create webbing data rows - only from the first Excel dataset that has webbing items
-    // Find the first dataset that contains webbing items
-    const firstDatasetWithWebbing = Array.from(webbingMap.keys()).sort()[0];
-    
-    if (firstDatasetWithWebbing !== undefined) {
-      const webbingItems = webbingMap.get(firstDatasetWithWebbing) || [];
-      
-      if (webbingItems.length > 0) {
-        // Get column headings from the dataset with webbing
-        const dataset = datasets[firstDatasetWithWebbing];
-        const webbingHeaderRow = [dataset.panelHeading, dataset.materialHeading];
-        
-        // Create webbing data rows from only the first dataset with webbing
-        const rows = webbingItems.map(item => [item.panelNo, item.material]);
-        
-        // Set the merged webbing data (only two columns)
-        setMergedWebbingData([webbingHeaderRow, ...rows]);
-      } else {
-        // No webbing data found
-        setMergedWebbingData([]);
-      }
-    } else {
-      // No dataset with webbing found
-      setMergedWebbingData([]);
-    }
-    
-    // Combine header and regular data rows
-    const newMergedData = [headerRow, ...dataRows];
-    setMergedData(newMergedData);
-  };
+    }  };
 
   // Handle header cell edit
   const handleHeaderEdit = (datasetIdx: number, isPanel: boolean, value: string) => {
@@ -504,7 +516,6 @@ const OrderList = () => {
       createMergedData(updatedDatasets);
     }
   };
-
   // HTML table export function that opens in a new tab
   const handleExportPDF = () => {
     exportOrderDataAsHTML(
@@ -513,7 +524,8 @@ const OrderList = () => {
       mergedData,
       excelDataSets,
       hidePanelColumns,
-      mergedWebbingData
+      mergedWebbingData,
+      highlightedCells // Pass the highlighted cells to the export function
     );
   };
 
@@ -731,9 +743,32 @@ const OrderList = () => {
     setIsDragging(false);
     setDraggedPair(null);
     setDropTarget(null);
-    
-    // Reset cursor
+      // Reset cursor
     document.body.style.cursor = 'default';
+  };
+
+  // Cell highlighting handlers
+  const handleCellClick = (datasetIdx: number, rowIdx: number, cellType: 'panel' | 'material') => {
+    const cellKey = `${cellType}-${datasetIdx}-${rowIdx}`;
+    const updatedHighlighted = new Set(highlightedCells);
+    
+    if (updatedHighlighted.has(cellKey)) {
+      updatedHighlighted.delete(cellKey);
+    } else {
+      updatedHighlighted.add(cellKey);
+    }
+    
+    setHighlightedCells(updatedHighlighted);
+  };
+
+  const clearHighlights = () => {
+    setHighlightedCells(new Set());
+  };
+
+  const getCellClassName = (datasetIdx: number, rowIdx: number, cellType: 'panel' | 'material', baseClassName: string) => {
+    const cellKey = `${cellType}-${datasetIdx}-${rowIdx}`;
+    const isHighlighted = highlightedCells.has(cellKey);
+    return `${baseClassName} ${isHighlighted ? 'highlighted-cell' : ''}`;
   };
   
   return (
@@ -811,8 +846,7 @@ const OrderList = () => {
           >
             <Save size={20} className="mr-2" />
             <span>{isSaving ? 'Saving...' : 'Save Project'}</span>
-          </button>
-          {/* Export to PDF button */}
+          </button>          {/* Export to PDF button */}
           <button
             onClick={handleExportPDF}
             disabled={mergedData.length === 0}
@@ -821,6 +855,17 @@ const OrderList = () => {
             <FileText size={20} className="mr-2" />
             <span>PDF (A4)</span>
           </button>
+          
+          {/* Clear Highlights button - only visible when there are highlighted cells */}
+          {highlightedCells.size > 0 && (
+            <button
+              onClick={clearHighlights}
+              className="flex items-center justify-center bg-amber-500 text-white p-2 rounded-md hover:bg-amber-600 transition-colors"
+              title="Clear all highlighted cells"
+            >
+              <span>Clear Highlights ({highlightedCells.size})</span>
+            </button>
+          )}
         </div>
       </div>
       
@@ -955,15 +1000,18 @@ const OrderList = () => {
                     >
                       {excelDataSets.map((dataset, datasetIdx) => (
                         <React.Fragment key={`${dataset.id}-${rowIdx}`}>
-                          {rowIdx < dataset.rows.length ? (
-                            <>
+                          {rowIdx < dataset.rows.length ? (                            <>
                               <td 
-                                className={`border p-2 ${hidePanelColumns && datasetIdx > 0 ? 'hidden' : ''}`}
+                                className={getCellClassName(datasetIdx, rowIdx, 'panel', `border p-2 cursor-pointer ${hidePanelColumns && datasetIdx > 0 ? 'hidden' : ''}`)}
+                                onClick={() => handleCellClick(datasetIdx, rowIdx, 'panel')}
+                                title="Click to highlight"
                               >
                                 {dataset.rows[rowIdx].panelNo}
                               </td>
                               <td 
-                                className="border p-2"
+                                className={getCellClassName(datasetIdx, rowIdx, 'material', 'border p-2 cursor-pointer')}
+                                onClick={() => handleCellClick(datasetIdx, rowIdx, 'material')}
+                                title="Click to highlight"
                               >
                                 {dataset.rows[rowIdx].material}
                               </td>

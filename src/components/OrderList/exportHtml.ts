@@ -202,7 +202,7 @@ export const exportOrderDataAsHTML = (
         /* Special styling for webbing cells - Excel-like behavior */
         table.webbing-table td {
           padding: 4px 8px;
-          line-height: 0.75 !important;
+          line-height: 1.20 !important;
           font-family: Arial, sans-serif;
           font-size: 10px;
           white-space: pre-wrap !important;
